@@ -77,117 +77,95 @@ id | student_id | semester | sgpa | credits_completed | academic_year | created_
 ## Installation & Setup
 
 ### Prerequisites
-- Node.js (v16 or higher)
-- PostgreSQL database
-- npm or yarn package manager
+- Node.js 18 or higher
+- PostgreSQL 14+ (or Docker, using the included `docker-compose.yml`)
 
-### Backend Setup
+### 1. Database
+```bash
+docker compose up -d db      # starts PostgreSQL on localhost:5432
+```
 
-1. Navigate to the backend directory:
+### 2. Backend
 ```bash
 cd backend
-```
-
-2. Install dependencies:
-```bash
 npm install
+cp .env.example .env         # then set JWT_SECRET
+npx prisma migrate deploy    # creates the tables
+npm run seed                 # optional: 96 demo students + demo logins
+npm run dev                  # http://localhost:5000
 ```
 
-3. Set up environment variables:
-Create a `.env` file with:
-```env
-DATABASE_URL="postgresql://username:password@localhost:5432/eduinsight"
-JWT_SECRET="your-secret-key"
-PORT=5000
-```
+Demo logins created by the seed script (password `Password@123`):
 
-4. Run database migrations:
-```bash
-npx prisma migrate dev
-```
+| Role | Email |
+|---|---|
+| Admin | admin@college.edu |
+| Faculty (CSE A & B) | faculty@college.edu |
+| Student | student@college.edu |
 
-5. Generate Prisma client:
-```bash
-npx prisma generate
-```
-
-6. Start the development server:
-```bash
-npm run dev
-```
-
-### Frontend Setup
-
-1. Navigate to the frontend directory:
+### 3. Frontend
 ```bash
 cd frontend
-```
-
-2. Install dependencies:
-```bash
 npm install
-```
-
-3. Set up environment variables:
-Create a `.env` file with:
-```env
-REACT_APP_API_URL=http://localhost:5000/api
-```
-
-4. Start the development server:
-```bash
-npm start
+cp .env.example .env         # REACT_APP_API_URL=http://localhost:5000/api
+npm start                    # http://localhost:3000
 ```
 
 ## Data Import
 
-The platform supports Excel file uploads for bulk student data import. Required columns:
-- `roll_number`
-- `name`
-- `branch`
-- `section`
-- `semester_1_sgpa`
-- `semester_2_sgpa`
-- `cgpa`
+Admins upload `.xlsx`, `.xls` or `.csv` files on the **Import** page (or `POST /api/import/students`).
+Columns: `roll_number`, `name`, `branch`, `section`, `email` (required), `semester_1_sgpa`, `semester_2_sgpa`, `cgpa` (optional; CGPA is computed from SGPAs when missing).
+Headers are matched case-insensitively ("Roll Number" works). Each row is validated, and the response lists every bad row with its reason.
+Use *Validate only* to check a file without writing anything. A ready-made template is available from `GET /api/import/template`.
 
 ## Analytics Calculations
 
-### Pass Percentage
-```
-(Students with CGPA ≥ 5.0 / Total Students) × 100
-```
+- **Pass percentage**: students with CGPA ≥ 5.0 ÷ students with a CGPA × 100
+- **At risk**: CGPA below 6.0
+- **Distribution buckets**: < 5, 5–6, 6–7, 7–8, 8–9, 9–10
+- **Standing**: Distinction ≥ 8.0, First class ≥ 6.5, Pass ≥ 5.0, otherwise At risk
+- **Trends**: average SGPA per semester (overall and per branch) from academic session records
+- **Ranking**: position by CGPA within section and within branch
 
-### Performance Distribution
-Count students in CGPA ranges:
-- 9+: Excellent
-- 8-9: Very Good
-- 7-8: Good
-- 6-7: Satisfactory
-- Below 6: Needs Improvement
+## Access Control
 
-### Trend Analysis
-Semester-over-semester performance deltas and ranking calculations.
+| Role | Can see |
+|---|---|
+| Admin | Every student; can manage users, students, faculty assignments and imports |
+| Faculty | Only students in sections assigned to them |
+| Student | Only their own record (linked by email) |
 
 ## API Endpoints
 
-### Authentication
-- `POST /api/auth/login` - User login
-- `POST /api/auth/register` - User registration (admin only)
+All endpoints except login require `Authorization: Bearer <token>`.
+
+### Auth
+- `POST /api/auth/login` · `POST /api/auth/register` (admin) · `GET /api/auth/me`
+
+### Users (admin)
+- `GET /api/users?role=` · `GET/PUT/DELETE /api/users/:id`
 
 ### Students
-- `GET /api/students` - Get all students (admin/faculty)
-- `GET /api/students/:id` - Get student details
-- `POST /api/students` - Create student record
-- `PUT /api/students/:id` - Update student record
-- `DELETE /api/students/:id` - Delete student record
+- `GET /api/students?search=&branch=&section=&minCgpa=&maxCgpa=&sort=&order=&page=&limit=`
+- `GET /api/students/me` (student) · `GET /api/students/:id`
+- `POST /api/students` · `PUT /api/students/:id` · `DELETE /api/students/:id` (admin)
+- `POST /api/students/:id/sessions` – add/update a semester record (admin, faculty)
+
+### Faculty
+- `GET /api/faculty/my-sections` (faculty)
+- `GET/POST /api/faculty/assignments` · `DELETE /api/faculty/assignments/:id` (admin)
 
 ### Analytics
-- `GET /api/analytics/overview` - College-wide KPIs
-- `GET /api/analytics/branch/:branch` - Branch-specific analytics
-- `GET /api/analytics/section/:section` - Section-specific analytics
+- `GET /api/analytics/overview` – KPIs, distribution, top performers, at-risk students
+- `GET /api/analytics/branches` · `GET /api/analytics/sections?branch=`
+- `GET /api/analytics/compare?branches=CSE,ECE`
+- `GET /api/analytics/trends`
+- `GET /api/analytics/rankings?branch=&section=&limit=`
+- `GET /api/analytics/me` (student) · `GET /api/analytics/student/:id`
+- `GET /api/analytics/export` – CSV download
 
-### Import
-- `POST /api/import/students` - Upload Excel file for student data
+### Import (admin)
+- `POST /api/import/students?dryRun=true|false` · `GET /api/import/template`
 
 ## Development Phases
 

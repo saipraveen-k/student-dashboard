@@ -3,7 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from './lib/prisma';
 
 // Routes
 import authRoutes from './routes/auth';
@@ -16,7 +16,6 @@ import importRoutes from './routes/import';
 dotenv.config();
 
 const app = express();
-const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
@@ -69,8 +68,10 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
+}
 
-export { prisma };
+export { app, prisma };
